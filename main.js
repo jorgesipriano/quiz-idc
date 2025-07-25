@@ -355,7 +355,15 @@ function resetGame() {
     livesEl.textContent = `VIDAS: ${state.lives}`;
 }
 
-function startGame() { hideMessage(); resetGame(); }
+function startGame() {
+    // ADICIONE ESTAS DUAS LINHAS NO INÍCIO DA FUNÇÃO
+    document.removeEventListener('click', startInteraction);
+    document.removeEventListener('keydown', startInteraction);
+    
+    // O resto da função continua igual
+    hideMessage();
+    resetGame();
+}
 
 function endGame(isWin) {
     if(state.gameOver || state.levelComplete) return;
