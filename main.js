@@ -1,3 +1,8 @@
+// Arquivo main.js atualizado para Jornada do Influenciador
+// Inclui: tiro no ar, dificuldade progressiva, e suporte a toque
+
+import './style.css';
+
 // --- CONFIGURAÇÕES DO JOGO ---
 const config = {
     width: 1000,
@@ -26,7 +31,7 @@ let state = {
     gameStarted: false,
 };
 
-// --- ELEMENTOS DO DOM E CONTEXTO DO CANVAS ---
+// --- ELEMENTOS DO DOM ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = config.width;
@@ -39,7 +44,6 @@ const messageTitle = document.getElementById('message-title');
 const messageText = document.getElementById('message-text');
 const messageButton = document.getElementById('message-button');
 
-// --- CARREGAMENTO DE ASSETS ---
 const images = {};
 const sounds = {};
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -62,8 +66,7 @@ async function loadAssets() {
         levelWin: './level_win.mp3',
         gameOver: './game_over.mp3',
     };
-    
-    // Carregar imagens
+
     const imagePromises = Object.entries(imageSources).map(([name, src]) => {
         return new Promise((resolve) => {
             const img = new Image();
@@ -75,7 +78,6 @@ async function loadAssets() {
         });
     });
 
-    // Carregar sons
     const soundPromises = Object.entries(soundSources).map(async ([name, src]) => {
         const response = await fetch(src);
         const arrayBuffer = await response.arrayBuffer();
@@ -94,8 +96,6 @@ function playSound(buffer) {
     source.start(0);
 }
 
-
-// --- CLASSES DO JOGO ---
 class Entity {
     constructor(x, y, width, height, image) {
         this.x = x;
@@ -131,33 +131,30 @@ class Player extends Entity {
     }
 
     update() {
-        // Movimento horizontal
         if (state.keys['ArrowLeft']) this.dx = -config.playerSpeed;
         else if (state.keys['ArrowRight']) this.dx = config.playerSpeed;
         else this.dx = 0;
 
         this.x += this.dx;
 
-        // Gravidade
         this.dy += config.gravity;
         this.y += this.dy;
 
-        // Limites do chão
         if (this.y + this.height > canvas.height) {
             this.y = canvas.height - this.height;
             this.dy = 0;
             this.onGround = true;
+        } else {
+            this.onGround = false;
         }
 
-        // Limites laterais
         if (this.x < 0) this.x = 0;
         if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
 
-        // Atirar
         if (this.shootCooldown > 0) this.shootCooldown--;
-        if (state.keys[' '] && this.onGround && this.shootCooldown === 0) {
+        if (state.keys[' '] && this.shootCooldown === 0) {
             this.shoot();
-            this.shootCooldown = 20; // Cooldown de 20 frames
+            this.shootCooldown = 20;
         }
     }
 
@@ -195,7 +192,7 @@ class Enemy extends Entity {
 
     update() {
         this.x += this.dx;
-        this.y += Math.sin(state.gameTime / 20) * 0.5; // Movimento ondulado
+        this.y += Math.sin(state.gameTime / 20) * 0.5;
     }
 }
 
@@ -205,40 +202,38 @@ class FaithOrb extends Entity {
     }
 }
 
-// --- LÓGICA DE ATUALIZAÇÃO E RENDERIZAÇÃO ---
 function update() {
     if (state.gameOver || state.levelComplete || !state.gameStarted) return;
-
     state.gameTime++;
     state.player.update();
 
-    // Spawna inimigos
     if (state.gameTime % config.enemySpawnRate === 0) {
         const enemyY = canvas.height - 50 - Math.random() * 100;
         state.enemies.push(new Enemy(canvas.width, enemyY));
     }
-    
-    // Spawna orbs de fé
+
     if (state.gameTime > 0 && state.gameTime % 200 === 0) {
         const orbY = Math.random() * (canvas.height - 150) + 50;
         const orbX = Math.random() * (canvas.width - 100) + 50;
         state.faithOrbs.push(new FaithOrb(orbX, orbY));
     }
 
-    // Atualiza projéteis
-    state.projectiles.forEach((p, i) => {
+    if (state.gameTime % 1000 === 0) {
+        config.enemySpeed += 0.2;
+        if (config.enemySpawnRate > 60) config.enemySpawnRate -= 10;
+        state.enemies.forEach(e => e.dx = -config.enemySpeed);
+    }
+
+    state.projectiles = state.projectiles.filter(p => {
         p.update();
-        if (p.x > canvas.width) state.projectiles.splice(i, 1);
+        return p.x <= canvas.width;
     });
 
-    // Atualiza inimigos
-    state.enemies.forEach((e, i) => {
+    state.enemies = state.enemies.filter(e => {
         e.update();
-        if (e.x + e.width < 0) state.enemies.splice(i, 1);
+        return e.x + e.width >= 0;
     });
 
-    // --- Verificação de Colisões ---
-    // Projéteis vs Inimigos
     state.projectiles.forEach((p, pi) => {
         state.enemies.forEach((e, ei) => {
             if (p.isCollidingWith(e)) {
@@ -249,53 +244,43 @@ function update() {
             }
         });
     });
-    
-    // Player vs Orbs de Fé
-    state.faithOrbs.forEach((orb, i) => {
-        if(state.player.isCollidingWith(orb)) {
-            state.faithOrbs.splice(i, 1);
+
+    state.faithOrbs = state.faithOrbs.filter((orb, i) => {
+        if (state.player.isCollidingWith(orb)) {
             state.score += 5;
             playSound(sounds.collect);
+            return false;
         }
+        return true;
     });
 
-    // Player vs Inimigos
-    state.enemies.forEach((e, i) => {
+    state.enemies = state.enemies.filter((e, i) => {
         if (state.player.isCollidingWith(e)) {
-            state.enemies.splice(i, 1);
             state.lives--;
-            if(state.lives <= 0) {
-                endGame(false);
-            }
+            if (state.lives <= 0) endGame(false);
+            return false;
         }
+        return true;
     });
 
-    // Verifica condição de vitória
-    if (state.score >= 100) {
-        endGame(true);
-    }
+    if (state.score >= 300) endGame(true);
 
-    // Atualiza UI
     scoreEl.textContent = `FÉ: ${state.score}`;
     livesEl.textContent = `VIDAS: ${state.lives}`;
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if(images.background) {
-        ctx.drawImage(images.background, 0, 0, canvas.width, canvas.height);
-    }
-
+    if (images.background) ctx.drawImage(images.background, 0, 0, canvas.width, canvas.height);
     if (!state.gameStarted) return;
 
     state.faithOrbs.forEach(orb => orb.draw());
     state.player.draw();
     state.projectiles.forEach(p => p.draw());
     state.enemies.forEach(e => e.draw());
-    
-    // Desenha o portão de chegada se a meta foi atingida
+
     if (state.levelComplete && images.goal) {
-         ctx.drawImage(images.goal, canvas.width - 150, canvas.height - 200, 150, 200);
+        ctx.drawImage(images.goal, canvas.width - 150, canvas.height - 200, 150, 200);
     }
 }
 
@@ -305,15 +290,12 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// --- CONTROLE DE ESTADO DO JOGO ---
-
 function showMessage(title, text, buttonText, onButtonClick) {
     messageTitle.textContent = title;
     messageText.textContent = text;
     messageButton.textContent = buttonText;
     messageContainer.classList.remove('hidden');
-    
-    // Remove o listener antigo para evitar múltiplos cliques
+
     const newButton = messageButton.cloneNode(true);
     messageButton.parentNode.replaceChild(newButton, messageButton);
     document.getElementById('message-button').onclick = onButtonClick;
@@ -334,7 +316,7 @@ function resetGame() {
     state.levelComplete = false;
     state.gameOver = false;
     state.gameStarted = true;
-    
+
     scoreEl.textContent = `FÉ: ${state.score}`;
     livesEl.textContent = `VIDAS: ${state.lives}`;
 }
@@ -348,29 +330,15 @@ function endGame(isWin) {
     if (isWin) {
         state.levelComplete = true;
         playSound(sounds.levelWin);
-        showMessage(
-            "FASE CONCLUÍDA!",
-            "Você superou as distrações e fortaleceu sua fé. Continue firme na sua jornada!",
-            "Seja um influenciador de Cristo!",
-            () => { 
-                // Futuramente, iria para a próxima fase. Por agora, reinicia.
-                startGame();
-            }
-        );
+        showMessage("FASE CONCLUÍDA!", "Você superou as distrações e fortaleceu sua fé. Continue firme na sua jornada!", "Continuar", startGame);
     } else {
         state.gameOver = true;
         playSound(sounds.gameOver);
-        showMessage(
-            "FIM DE JOGO",
-            "As distrações foram fortes, mas não desista. Levante-se e tente novamente!",
-            "Tentar Novamente",
-            startGame
-        );
+        showMessage("FIM DE JOGO", "As distrações foram fortes, mas não desista. Tente novamente!", "Recomeçar", startGame);
     }
 }
 
-
-// --- INICIALIZAÇÃO ---
+// Eventos de teclado
 window.addEventListener('keydown', (e) => {
     state.keys[e.key] = true;
     if (e.key === 'ArrowUp') state.player?.jump();
@@ -380,27 +348,46 @@ window.addEventListener('keyup', (e) => {
     state.keys[e.key] = false;
 });
 
-// Começa o jogo após carregar os assets
+// Eventos de toque para Android
+const touchButtons = {
+    left: document.getElementById('left'),
+    right: document.getElementById('right'),
+    jump: document.getElementById('jump'),
+    shoot: document.getElementById('shoot'),
+};
+
+Object.entries(touchButtons).forEach(([key, btn]) => {
+    btn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (key === 'jump') state.player?.jump();
+        else if (key === 'shoot') state.keys[' '] = true;
+        else if (key === 'left') state.keys['ArrowLeft'] = true;
+        else if (key === 'right') state.keys['ArrowRight'] = true;
+    });
+
+    btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        if (key === 'shoot') state.keys[' '] = false;
+        else if (key === 'left') state.keys['ArrowLeft'] = false;
+        else if (key === 'right') state.keys['ArrowRight'] = false;
+    });
+});
+
 window.addEventListener('load', async () => {
     await loadAssets();
-    
-    // Iniciar o AudioContext com um gesto do usuário
     const startInteraction = () => {
         audioContext.resume().then(() => {
             document.removeEventListener('click', startInteraction);
             document.removeEventListener('keydown', startInteraction);
-            
             showMessage(
                 "Jornada do Influenciador",
-                "Use as setas para mover, Seta para Cima para pular e Espaço para atirar luz contra os demônios da dúvida. Colete Orbes de Fé para aumentar sua pontuação e alcançar 100 pontos de Fé para passar de fase!",
+                "Use as setas ou toque para mover, pular e atirar luz contra as dúvidas! Colete Orbes de Fé e vença!",
                 "Começar a Jornada!",
                 startGame
             );
-            
             gameLoop();
         });
     };
-
     document.addEventListener('click', startInteraction);
     document.addEventListener('keydown', startInteraction);
 });
