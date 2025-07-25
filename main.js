@@ -357,9 +357,10 @@ function resetGame() {
 
 function startGame() {
     // ADICIONE ESTAS DUAS LINHAS NO INÍCIO DA FUNÇÃO
+    if (startInteraction) {
     document.removeEventListener('click', startInteraction);
     document.removeEventListener('keydown', startInteraction);
-    
+    }
     // O resto da função continua igual
     hideMessage();
     resetGame();
@@ -401,7 +402,7 @@ function setupEventListeners() {
 }
 
 window.addEventListener('load', async () => {
-    const startInteraction = () => {
+    startInteraction = () => {
         document.removeEventListener('click', startInteraction);
         document.removeEventListener('keydown', startInteraction);
         showMessage("Carregando...", "Aguarde, estamos preparando a sua jornada...", "...", ()=>{});
