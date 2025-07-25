@@ -1,3 +1,6 @@
+// PASSO 1: AQUI ESTÁ A LINHA QUE FALTAVA NO TOPO DO ARQUIVO
+let startInteraction;
+
 // --- CONFIGURAÇÕES DO JOGO ---
 const config = {
     width: 1000,
@@ -9,7 +12,7 @@ const config = {
     enemyBaseSpeed: 1.5,
     enemySpawnBaseRate: 150,
     initialLives: 3,
-    winScore: 3000, // ALTERADO: Meta de 3000 pontos
+    winScore: 3000,
 };
 
 // --- ESTADO DO JOGO ---
@@ -17,7 +20,7 @@ let state = {
     keys: {},
     player: null,
     projectiles: [],
-    enemyProjectiles: [], // NOVO: Array para os projéteis dos inimigos
+    enemyProjectiles: [],
     enemies: [],
     faithOrbs: [],
     score: 0,
@@ -28,7 +31,7 @@ let state = {
     gameStarted: false,
     currentEnemySpeed: config.enemyBaseSpeed,
     currentSpawnRate: config.enemySpawnBaseRate,
-    enemySpawnCounter: 0, // NOVO: Contador para decidir qual inimigo spawnar
+    enemySpawnCounter: 0,
 };
 
 // --- ELEMENTOS DO DOM E CONTEXTO DO CANVAS ---
@@ -56,8 +59,8 @@ async function loadAssets() {
         faithOrb: './faith_orb.png',
         background: './background.png',
         goal: './goal.png',
-        enemyShooter: './enemy_shooter.png', // NOVO: Imagem do inimigo que atira
-        enemyProjectile: './enemy_projectile.png', // NOVO: Imagem do projétil inimigo
+        enemyShooter: './enemy_shooter.png',
+        enemyProjectile: './enemy_projectile.png',
     };
 
     const soundSources = {
@@ -74,7 +77,7 @@ async function loadAssets() {
             const img = new Image();
             img.src = src;
             img.onload = () => { images[name] = img; resolve(); };
-            img.onerror = () => { console.warn(`Não foi possível carregar a imagem: ${src}. Usando um quadrado vazio.`); resolve(); } // Evita travar se uma imagem faltar
+            img.onerror = () => { console.warn(`Não foi possível carregar a imagem: ${src}. Usando um quadrado vazio.`); resolve(); }
         });
     });
 
@@ -109,7 +112,7 @@ class Entity {
     draw() { 
         if (this.image && this.image.complete && this.image.naturalHeight !== 0) {
             ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
-        } else { // Desenha um substituto se a imagem falhar ou não carregou
+        } else {
             ctx.fillStyle = 'magenta';
             ctx.fillRect(this.x, this.y, this.width, this.height);
         }
@@ -157,11 +160,10 @@ class Projectile extends Entity {
     update() { this.x += this.dx; }
 }
 
-// NOVO: Projétil do inimigo
 class EnemyProjectile extends Entity {
     constructor(x, y) {
         super(x, y, 25, 25, images.enemyProjectile);
-        this.dy = 5; // Atira para baixo
+        this.dy = 5;
     }
     update() { this.y += this.dy; }
 }
@@ -171,35 +173,31 @@ class Enemy extends Entity {
     update() { this.x += this.dx; this.y += Math.sin(state.gameTime / 30) * 0.7; }
 }
 
-// NOVO: Inimigo que atira e é resistente
 class ShooterEnemy extends Enemy {
     constructor(x, y, speed) {
         super(x, y, speed);
-        this.image = images.enemyShooter; // Usa a nova imagem
+        this.image = images.enemyShooter;
         this.width = 60;
         this.height = 60;
-        this.health = 3; // Precisa de 3 tiros para morrer
-        this.shootCooldown = Math.random() * 100 + 100; // Cooldown inicial aleatório
+        this.health = 3;
+        this.shootCooldown = Math.random() * 100 + 100;
     }
-
     update() {
-        super.update(); // Executa a lógica de movimento do inimigo normal
+        super.update();
         this.shootCooldown--;
         if (this.shootCooldown <= 0) {
             this.shoot();
-            this.shootCooldown = 180; // Atira a cada 3 segundos
+            this.shootCooldown = 180;
         }
     }
-
     shoot() {
-        if(this.x < canvas.width) { // Só atira se estiver na tela
+        if(this.x < canvas.width) {
             state.enemyProjectiles.push(new EnemyProjectile(this.x + this.width / 2, this.y + this.height));
         }
     }
-
     takeHit() {
         this.health--;
-        return this.health <= 0; // Retorna true se morreu
+        return this.health <= 0;
     }
 }
 
@@ -216,13 +214,11 @@ function update() {
         if (state.currentSpawnRate > 60) state.currentSpawnRate -= 10;
     }
     
-    // ALTERADO: Lógica de Spawn para alternar inimigos
     if (state.gameTime % Math.round(state.currentSpawnRate) === 0) {
         const enemyY = canvas.height - 80 - Math.random() * 200;
         state.enemySpawnCounter++;
-        // A cada 4 inimigos, spawna um que atira
         if (state.enemySpawnCounter % 4 === 0) {
-            state.enemies.push(new ShooterEnemy(canvas.width, enemyY, state.currentEnemySpeed * 0.8)); // Um pouco mais lento
+            state.enemies.push(new ShooterEnemy(canvas.width, enemyY, state.currentEnemySpeed * 0.8));
         } else {
             state.enemies.push(new Enemy(canvas.width, enemyY, state.currentEnemySpeed));
         }
@@ -234,41 +230,36 @@ function update() {
         state.faithOrbs.push(new FaithOrb(orbX, orbY));
     }
 
-    // Atualiza todos os projéteis e inimigos
     state.projectiles.forEach(p => p.update());
     state.enemyProjectiles.forEach(p => p.update());
     state.enemies.forEach(e => e.update());
 
-    // Remove entidades que saíram da tela
     state.projectiles = state.projectiles.filter(p => p.x <= canvas.width);
     state.enemyProjectiles = state.enemyProjectiles.filter(p => p.y < canvas.height);
     state.enemies = state.enemies.filter(e => e.x + e.width >= 0);
 
-    // --- Verificação de Colisões (Lógica Alterada) ---
-    // Projéteis do Jogador vs Inimigos
     for (let i = state.projectiles.length - 1; i >= 0; i--) {
         for (let j = state.enemies.length - 1; j >= 0; j--) {
             const p = state.projectiles[i];
             const e = state.enemies[j];
             if (p?.isCollidingWith(e)) {
                 playSound(sounds.hit);
-                state.projectiles.splice(i, 1); // Projétil sempre some
+                state.projectiles.splice(i, 1);
                 
                 if (e instanceof ShooterEnemy) {
-                    if (e.takeHit()) { // Se o inimigo morreu após o tiro
-                        state.score += 25; // Recompensa maior
+                    if (e.takeHit()) {
+                        state.score += 25;
                         state.enemies.splice(j, 1);
                     }
-                } else { // Inimigo comum morre com 1 tiro
+                } else {
                     state.score += 10;
                     state.enemies.splice(j, 1);
                 }
-                break; // Sai do loop de inimigos pois o projétil já foi usado
+                break;
             }
         }
     }
     
-    // NOVO: Projéteis Inimigos vs Jogador
     for (let i = state.enemyProjectiles.length - 1; i >= 0; i--) {
         const p = state.enemyProjectiles[i];
         if (p?.isCollidingWith(state.player)) {
@@ -277,7 +268,6 @@ function update() {
         }
     }
 
-    // Jogador vs Inimigos (colisão corporal)
     for (let i = state.enemies.length - 1; i >= 0; i--) {
         if (state.player.isCollidingWith(state.enemies[i])) {
             state.player.takeDamage();
@@ -285,7 +275,6 @@ function update() {
         }
     }
 
-    // Jogador vs Orbes de Fé
     for (let i = state.faithOrbs.length - 1; i >= 0; i--) {
         if(state.player.isCollidingWith(state.faithOrbs[i])) {
             state.score += 5;
@@ -308,7 +297,7 @@ function draw() {
     state.faithOrbs.forEach(orb => orb.draw());
     state.player.draw();
     state.projectiles.forEach(p => p.draw());
-    state.enemyProjectiles.forEach(p => p.draw()); // NOVO: Desenha projéteis inimigos
+    state.enemyProjectiles.forEach(p => p.draw());
     state.enemies.forEach(e => e.draw());
 
     if (state.levelComplete && images.goal) {
@@ -355,13 +344,13 @@ function resetGame() {
     livesEl.textContent = `VIDAS: ${state.lives}`;
 }
 
+// PASSO 3: AQUI ESTÁ A FUNÇÃO CORRIGIDA
 function startGame() {
-    // ADICIONE ESTAS DUAS LINHAS NO INÍCIO DA FUNÇÃO
+    // Garante que os eventos de clique/tecla iniciais sejam removidos
     if (startInteraction) {
-    document.removeEventListener('click', startInteraction);
-    document.removeEventListener('keydown', startInteraction);
+        document.removeEventListener('click', startInteraction);
+        document.removeEventListener('keydown', startInteraction);
     }
-    // O resto da função continua igual
     hideMessage();
     resetGame();
 }
@@ -402,7 +391,9 @@ function setupEventListeners() {
 }
 
 window.addEventListener('load', async () => {
+    // PASSO 2: AQUI ESTÁ A ALTERAÇÃO (SEM O 'const')
     startInteraction = () => {
+        // Remove os próprios eventos para garantir que só execute uma vez
         document.removeEventListener('click', startInteraction);
         document.removeEventListener('keydown', startInteraction);
         showMessage("Carregando...", "Aguarde, estamos preparando a sua jornada...", "...", ()=>{});
@@ -419,6 +410,7 @@ window.addEventListener('load', async () => {
             }
         });
     };
+    // Adiciona os eventos iniciais que apontam para a função acima
     document.addEventListener('click', startInteraction);
     document.addEventListener('keydown', startInteraction);
 });
