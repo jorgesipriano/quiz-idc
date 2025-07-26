@@ -1,4 +1,3 @@
-// PASSO 1: AQUI ESTÁ A LINHA QUE FALTAVA NO TOPO DO ARQUIVO
 let startInteraction;
 
 // --- CONFIGURAÇÕES DO JOGO ---
@@ -344,17 +343,15 @@ function resetGame() {
     livesEl.textContent = `VIDAS: ${state.lives}`;
 }
 
-// PASSO 3: AQUI ESTÁ A FUNÇÃO CORRIGIDA
+// --- FUNÇÃO DE INICIAR O JOGO (CORRIGIDA) ---
 function startGame() {
-    // Garante que os eventos de clique/tecla iniciais sejam removidos
-    if (startInteraction) {
-        document.removeEventListener('click', startInteraction);
-        document.removeEventListener('keydown', startInteraction);
-    }
+    // Só inicia se não estiver rodando ou se o jogo acabou
+    if (state.gameStarted && !state.gameOver && !state.levelComplete) return;
     hideMessage();
     resetGame();
 }
 
+// --- FIM DE JOGO ---
 function endGame(isWin) {
     if(state.gameOver || state.levelComplete) return;
 
@@ -372,45 +369,85 @@ function endGame(isWin) {
 // --- INICIALIZAÇÃO E EVENTOS ---
 function setupEventListeners() {
     window.addEventListener('keydown', (e) => {
+        // Só ativa controles se o jogo estiver rodando e não acabou
+        if (!state.gameStarted || state.gameOver || state.levelComplete) return;
+
         state.keys[e.key] = true;
         if (e.key === 'ArrowUp') state.player?.jump();
+        // Impede que barra de espaço role a página
+        if (e.key === ' ') e.preventDefault();
     });
-    window.addEventListener('keyup', (e) => { state.keys[e.key] = false; });
+
+    window.addEventListener('keyup', (e) => {
+        if (!state.gameStarted) return;
+        state.keys[e.key] = false;
+    });
+
+    // Controles touch
     const touchButtons = { left: 'ArrowLeft', right: 'ArrowRight', shoot: ' ' };
     ['left', 'right', 'shoot'].forEach(id => {
         const btn = document.getElementById(id);
         if (btn) {
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); state.keys[touchButtons[id]] = true; }, { passive: false });
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); state.keys[touchButtons[id]] = false; }, { passive: false });
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (!state.gameStarted || state.gameOver || state.levelComplete) return;
+                state.keys[touchButtons[id]] = true;
+            }, { passive: false });
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                if (!state.gameStarted || state.gameOver || state.levelComplete) return;
+                state.keys[touchButtons[id]] = false;
+            }, { passive: false });
         }
     });
     const jumpBtn = document.getElementById('jump');
     if (jumpBtn) {
-        jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); state.player?.jump(); }, { passive: false });
+        jumpBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!state.gameStarted || state.gameOver || state.levelComplete) return;
+            state.player?.jump();
+        }, { passive: false });
     }
 }
 
 window.addEventListener('load', async () => {
-    // PASSO 2: AQUI ESTÁ A ALTERAÇÃO (SEM O 'const')
-    startInteraction = () => {
-        // Remove os próprios eventos para garantir que só execute uma vez
+    startInteraction = (e) => {
+        // Só inicia se o jogo ainda não começou
+        if (state.gameStarted && !state.gameOver && !state.levelComplete) return;
+
+        if (e.type === 'keydown') {
+            // Evita disparar com teclas que não sejam "Enter" ou "Espaço"
+            if (e.key !== ' ' && e.key !== 'Enter') return;
+            e.preventDefault();
+        }
         document.removeEventListener('click', startInteraction);
         document.removeEventListener('keydown', startInteraction);
+
         showMessage("Carregando...", "Aguarde, estamos preparando a sua jornada...", "...", ()=>{});
-        
         audioContext.resume().then(async () => {
             try {
                 await loadAssets();
                 setupEventListeners();
                 gameLoop();
-                showMessage("Jornada do Influenciador", `Use as setas/toque para se mover. Atire luz contra as dúvidas! Faça ${config.winScore} pontos para vencer!`, "Começar a Jornada!", startGame);
+                showMessage(
+                    "Jornada do Influenciador",
+                    `Use as setas/toque para se mover. Atire luz contra as dúvidas! Faça ${config.winScore} pontos para vencer!`,
+                    "Começar a Jornada!",
+                    startGame
+                );
             } catch(err) {
                 console.error("Erro ao carregar assets:", err);
-                showMessage("Erro!", "Não foi possível carregar os recursos do jogo. Verifique o console para mais detalhes.", "OK", ()=>{});
+                showMessage(
+                    "Erro!",
+                    "Não foi possível carregar os recursos do jogo. Verifique o console para mais detalhes.",
+                    "OK",
+                    ()=>{}
+                );
             }
         });
     };
-    // Adiciona os eventos iniciais que apontam para a função acima
+
+    // Eventos só para começar o jogo
     document.addEventListener('click', startInteraction);
     document.addEventListener('keydown', startInteraction);
 });
