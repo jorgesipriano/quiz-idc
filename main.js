@@ -128,25 +128,45 @@ class Player extends Entity {
         this.onGround = false; this.shootCooldown = 0; this.invulnerable = 0;
     }
     update() {
+        if (!state.gameStarted || state.gameOver || state.levelComplete) return;
         if (state.keys['ArrowLeft']) this.dx = -config.playerSpeed;
         else if (state.keys['ArrowRight']) this.dx = config.playerSpeed;
         else this.dx = 0;
         this.x += this.dx;
         this.dy += config.gravity;
         this.y += this.dy;
-        if (this.y + this.height > canvas.height) { this.y = canvas.height - this.height; this.dy = 0; this.onGround = true; } 
-        else { this.onGround = false; }
+        if (this.y + this.height > canvas.height) { 
+            this.y = canvas.height - this.height; 
+            this.dy = 0; 
+            this.onGround = true; 
+        } else { 
+            this.onGround = false; 
+        }
         if (this.x < 0) this.x = 0;
         if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
         if (this.shootCooldown > 0) this.shootCooldown--;
-        if (state.keys[' '] && this.shootCooldown === 0) { this.shoot(); this.shootCooldown = 20; }
+        if (state.keys[' '] && this.shootCooldown === 0 && state.gameStarted) { 
+            this.shoot(); 
+            this.shootCooldown = 20; 
+        }
         if (this.invulnerable > 0) this.invulnerable--;
     }
-    draw() { if (this.invulnerable > 0 && Math.floor(state.gameTime / 5) % 2 === 0) return; super.draw(); }
-    jump() { if (this.onGround) { this.dy = config.playerJump; playSound(sounds.jump); } }
-    shoot() { state.projectiles.push(new Projectile(this.x + this.width / 2, this.y + this.height / 2)); playSound(sounds.shoot); }
+    draw() { 
+        if (this.invulnerable > 0 && Math.floor(state.gameTime / 5) % 2 === 0) return; 
+        super.draw(); 
+    }
+    jump() { 
+        if (this.onGround && state.gameStarted) { 
+            this.dy = config.playerJump; 
+            playSound(sounds.jump); 
+        } 
+    }
+    shoot() { 
+        state.projectiles.push(new Projectile(this.x + this.width / 2, this.y + this.height / 2)); 
+        playSound(sounds.shoot); 
+    }
     takeDamage() {
-        if(this.invulnerable > 0) return;
+        if (this.invulnerable > 0) return;
         state.lives--;
         this.invulnerable = 120;
         playSound(sounds.hit);
@@ -190,7 +210,7 @@ class ShooterEnemy extends Enemy {
         }
     }
     shoot() {
-        if(this.x < canvas.width) {
+        if (this.x < canvas.width) {
             state.enemyProjectiles.push(new EnemyProjectile(this.x + this.width / 2, this.y + this.height));
         }
     }
@@ -200,11 +220,13 @@ class ShooterEnemy extends Enemy {
     }
 }
 
-class FaithOrb extends Entity { constructor(x, y) { super(x, y, 30, 30, images.faithOrb); } }
+class FaithOrb extends Entity { 
+    constructor(x, y) { super(x, y, 30, 30, images.faithOrb); } 
+}
 
 // --- LÓGICA DE ATUALIZAÇÃO E RENDERIZAÇÃO ---
 function update() {
-    if (state.gameOver || state.levelComplete || !state.gameStarted) return;
+    if (!state.gameStarted || state.gameOver || state.levelComplete) return;
     state.gameTime++;
     state.player.update();
 
@@ -275,7 +297,7 @@ function update() {
     }
 
     for (let i = state.faithOrbs.length - 1; i >= 0; i--) {
-        if(state.player.isCollidingWith(state.faithOrbs[i])) {
+        if (state.player.isCollidingWith(state.faithOrbs[i])) {
             state.score += 5;
             playSound(sounds.collect);
             state.faithOrbs.splice(i, 1);
@@ -290,7 +312,7 @@ function update() {
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if(images.background) ctx.drawImage(images.background, 0, 0, canvas.width, canvas.height);
+    if (images.background) ctx.drawImage(images.background, 0, 0, canvas.width, canvas.height);
     if (!state.gameStarted) return;
     
     state.faithOrbs.forEach(orb => orb.draw());
@@ -300,7 +322,7 @@ function draw() {
     state.enemies.forEach(e => e.draw());
 
     if (state.levelComplete && images.goal) {
-         ctx.drawImage(images.goal, canvas.width - 150, canvas.height - 200, 150, 200);
+        ctx.drawImage(images.goal, canvas.width - 150, canvas.height - 200, 150, 200);
     }
 }
 
@@ -322,7 +344,9 @@ function showMessage(title, text, buttonText, onButtonClick) {
     newButton.onclick = onButtonClick;
 }
 
-function hideMessage() { messageContainer.classList.add('hidden'); }
+function hideMessage() { 
+    messageContainer.classList.add('hidden'); 
+}
 
 function resetGame() {
     state.player = new Player(50, canvas.height - 80);
@@ -343,17 +367,20 @@ function resetGame() {
     livesEl.textContent = `VIDAS: ${state.lives}`;
 }
 
-// --- FUNÇÃO DE INICIAR O JOGO (CORRIGIDA) ---
 function startGame() {
-    // Só inicia se não estiver rodando ou se o jogo acabou
-    if (state.gameStarted && !state.gameOver && !state.levelComplete) return;
+    if (startInteraction) {
+        document.removeEventListener('click', startInteraction);
+        document.removeEventListener('keydown', startInteraction);
+        startInteraction = null;
+    }
     hideMessage();
     resetGame();
+    state.gameStarted = true;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-// --- FIM DE JOGO ---
 function endGame(isWin) {
-    if(state.gameOver || state.levelComplete) return;
+    if (state.gameOver || state.levelComplete) return;
 
     if (isWin) {
         state.levelComplete = true;
@@ -369,33 +396,30 @@ function endGame(isWin) {
 // --- INICIALIZAÇÃO E EVENTOS ---
 function setupEventListeners() {
     window.addEventListener('keydown', (e) => {
-        // Só ativa controles se o jogo estiver rodando e não acabou
-        if (!state.gameStarted || state.gameOver || state.levelComplete) return;
-
+        if (!state.gameStarted || state.gameOver || state.levelComplete) {
+            if (e.key === 'Enter' && (state.gameOver || state.levelComplete)) {
+                startGame();
+            }
+            return;
+        }
         state.keys[e.key] = true;
         if (e.key === 'ArrowUp') state.player?.jump();
-        // Impede que barra de espaço role a página
-        if (e.key === ' ') e.preventDefault();
     });
-
     window.addEventListener('keyup', (e) => {
-        if (!state.gameStarted) return;
         state.keys[e.key] = false;
     });
-
-    // Controles touch
     const touchButtons = { left: 'ArrowLeft', right: 'ArrowRight', shoot: ' ' };
     ['left', 'right', 'shoot'].forEach(id => {
         const btn = document.getElementById(id);
         if (btn) {
             btn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                if (!state.gameStarted || state.gameOver || state.levelComplete) return;
-                state.keys[touchButtons[id]] = true;
+                if (state.gameStarted && !state.gameOver && !state.levelComplete) {
+                    state.keys[touchButtons[id]] = true;
+                }
             }, { passive: false });
             btn.addEventListener('touchend', (e) => {
                 e.preventDefault();
-                if (!state.gameStarted || state.gameOver || state.levelComplete) return;
                 state.keys[touchButtons[id]] = false;
             }, { passive: false });
         }
@@ -404,50 +428,32 @@ function setupEventListeners() {
     if (jumpBtn) {
         jumpBtn.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            if (!state.gameStarted || state.gameOver || state.levelComplete) return;
-            state.player?.jump();
+            if (state.gameStarted && !state.gameOver && !state.levelComplete) {
+                state.player?.jump();
+            }
         }, { passive: false });
     }
 }
 
 window.addEventListener('load', async () => {
-    startInteraction = (e) => {
-        // Só inicia se o jogo ainda não começou
-        if (state.gameStarted && !state.gameOver && !state.levelComplete) return;
-
-        if (e.type === 'keydown') {
-            // Evita disparar com teclas que não sejam "Enter" ou "Espaço"
-            if (e.key !== ' ' && e.key !== 'Enter') return;
-            e.preventDefault();
-        }
+    startInteraction = () => {
+        if (state.gameStarted) return;
         document.removeEventListener('click', startInteraction);
         document.removeEventListener('keydown', startInteraction);
-
         showMessage("Carregando...", "Aguarde, estamos preparando a sua jornada...", "...", ()=>{});
+        
         audioContext.resume().then(async () => {
             try {
                 await loadAssets();
                 setupEventListeners();
                 gameLoop();
-                showMessage(
-                    "Jornada do Influenciador",
-                    `Use as setas/toque para se mover. Atire luz contra as dúvidas! Faça ${config.winScore} pontos para vencer!`,
-                    "Começar a Jornada!",
-                    startGame
-                );
+                showMessage("Jornada do Influenciador", `Use as setas/toque para se mover. Atire luz contra as dúvidas! Faça ${config.winScore} pontos para vencer!`, "Começar a Jornada!", startGame);
             } catch(err) {
                 console.error("Erro ao carregar assets:", err);
-                showMessage(
-                    "Erro!",
-                    "Não foi possível carregar os recursos do jogo. Verifique o console para mais detalhes.",
-                    "OK",
-                    ()=>{}
-                );
+                showMessage("Erro!", "Não foi possível carregar os recursos do jogo. Verifique o console para mais detalhes.", "OK", ()=>{});
             }
         });
     };
-
-    // Eventos só para começar o jogo
     document.addEventListener('click', startInteraction);
     document.addEventListener('keydown', startInteraction);
 });
