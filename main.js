@@ -1,5 +1,4 @@
-// PASSO 1: AQUI ESTÁ A LINHA QUE FALTAVA NO TOPO DO ARQUIVO
-let startInteraction;
+// main.js - VERSÃO SIMPLIFICADA E CORRIGIDA
 
 // --- CONFIGURAÇÕES DO JOGO ---
 const config = {
@@ -51,6 +50,9 @@ const images = {};
 const sounds = {};
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
+// Flag para garantir que o carregamento aconteça apenas uma vez
+let assetsLoaded = false;
+
 async function loadAssets() {
     const imageSources = {
         player: './player.png',
@@ -62,7 +64,6 @@ async function loadAssets() {
         enemyShooter: './enemy_shooter.png',
         enemyProjectile: './enemy_projectile.png',
     };
-
     const soundSources = {
         jump: './jump.mp3',
         shoot: './shoot.mp3',
@@ -71,27 +72,23 @@ async function loadAssets() {
         levelWin: './level_win.mp3',
         gameOver: './game_over.mp3',
     };
-    
     const imagePromises = Object.entries(imageSources).map(([name, src]) => {
         return new Promise((resolve) => {
             const img = new Image();
             img.src = src;
             img.onload = () => { images[name] = img; resolve(); };
-            img.onerror = () => { console.warn(`Não foi possível carregar a imagem: ${src}. Usando um quadrado vazio.`); resolve(); }
+            img.onerror = () => { console.warn(`Falha ao carregar imagem: ${src}`); resolve(); };
         });
     });
-
     const soundPromises = Object.entries(soundSources).map(async ([name, src]) => {
         try {
             const response = await fetch(src);
             const arrayBuffer = await response.arrayBuffer();
-            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-            sounds[name] = audioBuffer;
+            sounds[name] = await audioContext.decodeAudioData(arrayBuffer);
         } catch (e) {
-            console.warn(`Não foi possível carregar o som: ${src}`);
+            console.warn(`Falha ao carregar som: ${src}`);
         }
     });
-
     await Promise.all([...imagePromises, ...soundPromises]);
 }
 
@@ -103,227 +100,45 @@ function playSound(buffer) {
     source.start(0);
 }
 
-// --- CLASSES DO JOGO ---
+// --- CLASSES DO JOGO (sem alterações) ---
 class Entity {
-    constructor(x, y, width, height, image) {
-        this.x = x; this.y = y; this.width = width; this.height = height;
-        this.image = image; this.dx = 0; this.dy = 0;
-    }
-    draw() { 
-        if (this.image && this.image.complete && this.image.naturalHeight !== 0) {
-            ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
-        } else {
-            ctx.fillStyle = 'magenta';
-            ctx.fillRect(this.x, this.y, this.width, this.height);
-        }
-    }
-    isCollidingWith(other) {
-        return (this.x < other.x + other.width && this.x + this.width > other.x &&
-                this.y < other.y + other.height && this.y + this.height > other.y);
-    }
+    constructor(x, y, width, height, image) { this.x = x; this.y = y; this.width = width; this.height = height; this.image = image; this.dx = 0; this.dy = 0; }
+    draw() { if (this.image && this.image.complete && this.image.naturalHeight !== 0) { ctx.drawImage(this.image, this.x, this.y, this.width, this.height); } else { ctx.fillStyle = 'magenta'; ctx.fillRect(this.x, this.y, this.width, this.height); } }
+    isCollidingWith(other) { return (this.x < other.x + other.width && this.x + this.width > other.x && this.y < other.y + other.height && this.y + this.height > other.y); }
 }
-
 class Player extends Entity {
-    constructor(x, y) {
-        super(x, y, 60, 80, images.player);
-        this.onGround = false; this.shootCooldown = 0; this.invulnerable = 0;
-    }
-    update() {
-        if (state.keys['ArrowLeft']) this.dx = -config.playerSpeed;
-        else if (state.keys['ArrowRight']) this.dx = config.playerSpeed;
-        else this.dx = 0;
-        this.x += this.dx;
-        this.dy += config.gravity;
-        this.y += this.dy;
-        if (this.y + this.height > canvas.height) { this.y = canvas.height - this.height; this.dy = 0; this.onGround = true; } 
-        else { this.onGround = false; }
-        if (this.x < 0) this.x = 0;
-        if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
-        if (this.shootCooldown > 0) this.shootCooldown--;
-        if (state.keys[' '] && this.shootCooldown === 0) { this.shoot(); this.shootCooldown = 20; }
-        if (this.invulnerable > 0) this.invulnerable--;
-    }
+    constructor(x, y) { super(x, y, 60, 80, images.player); this.onGround = false; this.shootCooldown = 0; this.invulnerable = 0; }
+    update() { if (state.keys['ArrowLeft']) this.dx = -config.playerSpeed; else if (state.keys['ArrowRight']) this.dx = config.playerSpeed; else this.dx = 0; this.x += this.dx; this.dy += config.gravity; this.y += this.dy; if (this.y + this.height > canvas.height) { this.y = canvas.height - this.height; this.dy = 0; this.onGround = true; } else { this.onGround = false; } if (this.x < 0) this.x = 0; if (this.x + this.width > canvas.width) this.x = canvas.width - this.width; if (this.shootCooldown > 0) this.shootCooldown--; if (state.keys[' '] && this.shootCooldown === 0) { this.shoot(); this.shootCooldown = 20; } if (this.invulnerable > 0) this.invulnerable--; }
     draw() { if (this.invulnerable > 0 && Math.floor(state.gameTime / 5) % 2 === 0) return; super.draw(); }
     jump() { if (this.onGround) { this.dy = config.playerJump; playSound(sounds.jump); } }
     shoot() { state.projectiles.push(new Projectile(this.x + this.width / 2, this.y + this.height / 2)); playSound(sounds.shoot); }
-    takeDamage() {
-        if(this.invulnerable > 0) return;
-        state.lives--;
-        this.invulnerable = 120;
-        playSound(sounds.hit);
-        if (state.lives <= 0) endGame(false);
-    }
+    takeDamage() { if (this.invulnerable > 0) return; state.lives--; this.invulnerable = 120; playSound(sounds.hit); if (state.lives <= 0) endGame(false); }
 }
-
-class Projectile extends Entity {
-    constructor(x, y) { super(x - 15, y - 15, 30, 30, images.lightProjectile); this.dx = config.projectileSpeed; }
-    update() { this.x += this.dx; }
-}
-
-class EnemyProjectile extends Entity {
-    constructor(x, y) {
-        super(x, y, 25, 25, images.enemyProjectile);
-        this.dy = 5;
-    }
-    update() { this.y += this.dy; }
-}
-
-class Enemy extends Entity {
-    constructor(x, y, speed) { super(x, y, 50, 50, images.enemy); this.dx = -speed; }
-    update() { this.x += this.dx; this.y += Math.sin(state.gameTime / 30) * 0.7; }
-}
-
-class ShooterEnemy extends Enemy {
-    constructor(x, y, speed) {
-        super(x, y, speed);
-        this.image = images.enemyShooter;
-        this.width = 60;
-        this.height = 60;
-        this.health = 3;
-        this.shootCooldown = Math.random() * 100 + 100;
-    }
-    update() {
-        super.update();
-        this.shootCooldown--;
-        if (this.shootCooldown <= 0) {
-            this.shoot();
-            this.shootCooldown = 180;
-        }
-    }
-    shoot() {
-        if(this.x < canvas.width) {
-            state.enemyProjectiles.push(new EnemyProjectile(this.x + this.width / 2, this.y + this.height));
-        }
-    }
-    takeHit() {
-        this.health--;
-        return this.health <= 0;
-    }
-}
-
+class Projectile extends Entity { constructor(x, y) { super(x - 15, y - 15, 30, 30, images.lightProjectile); this.dx = config.projectileSpeed; } update() { this.x += this.dx; } }
+class EnemyProjectile extends Entity { constructor(x, y) { super(x, y, 25, 25, images.enemyProjectile); this.dy = 5; } update() { this.y += this.dy; } }
+class Enemy extends Entity { constructor(x, y, speed) { super(x, y, 50, 50, images.enemy); this.dx = -speed; } update() { this.x += this.dx; this.y += Math.sin(state.gameTime / 30) * 0.7; } }
+class ShooterEnemy extends Enemy { constructor(x, y, speed) { super(x, y, speed); this.image = images.enemyShooter; this.width = 60; this.height = 60; this.health = 3; this.shootCooldown = Math.random() * 100 + 100; } update() { super.update(); this.shootCooldown--; if (this.shootCooldown <= 0) { this.shoot(); this.shootCooldown = 180; } } shoot() { if (this.x < canvas.width) { state.enemyProjectiles.push(new EnemyProjectile(this.x + this.width / 2, this.y + this.height)); } } takeHit() { this.health--; return this.health <= 0; } }
 class FaithOrb extends Entity { constructor(x, y) { super(x, y, 30, 30, images.faithOrb); } }
 
-// --- LÓGICA DE ATUALIZAÇÃO E RENDERIZAÇÃO ---
-function update() {
-    if (state.gameOver || state.levelComplete || !state.gameStarted) return;
-    state.gameTime++;
-    state.player.update();
+// --- LÓGICA DE ATUALIZAÇÃO E RENDERIZAÇÃO (sem alterações) ---
+function update() { if (state.gameOver || state.levelComplete || !state.gameStarted) return; state.gameTime++; state.player.update(); if (state.gameTime % 600 === 0 && state.gameTime > 0) { state.currentEnemySpeed += 0.25; if (state.currentSpawnRate > 60) state.currentSpawnRate -= 10; } if (state.gameTime % Math.round(state.currentSpawnRate) === 0) { const enemyY = canvas.height - 80 - Math.random() * 200; state.enemySpawnCounter++; if (state.enemySpawnCounter % 4 === 0) { state.enemies.push(new ShooterEnemy(canvas.width, enemyY, state.currentEnemySpeed * 0.8)); } else { state.enemies.push(new Enemy(canvas.width, enemyY, state.currentEnemySpeed)); } } if (state.gameTime > 0 && state.gameTime % 250 === 0) { const orbY = Math.random() * (canvas.height - 200) + 50; const orbX = Math.random() * (canvas.width - 100) + 50; state.faithOrbs.push(new FaithOrb(orbX, orbY)); } state.projectiles.forEach(p => p.update()); state.enemyProjectiles.forEach(p => p.update()); state.enemies.forEach(e => e.update()); state.projectiles = state.projectiles.filter(p => p.x <= canvas.width); state.enemyProjectiles = state.enemyProjectiles.filter(p => p.y < canvas.height); state.enemies = state.enemies.filter(e => e.x + e.width >= 0); for (let i = state.projectiles.length - 1; i >= 0; i--) { for (let j = state.enemies.length - 1; j >= 0; j--) { const p = state.projectiles[i]; const e = state.enemies[j]; if (p?.isCollidingWith(e)) { playSound(sounds.hit); state.projectiles.splice(i, 1); if (e instanceof ShooterEnemy) { if (e.takeHit()) { state.score += 25; state.enemies.splice(j, 1); } } else { state.score += 10; state.enemies.splice(j, 1); } break; } } } for (let i = state.enemyProjectiles.length - 1; i >= 0; i--) { const p = state.enemyProjectiles[i]; if (p?.isCollidingWith(state.player)) { state.player.takeDamage(); state.enemyProjectiles.splice(i, 1); } } for (let i = state.enemies.length - 1; i >= 0; i--) { if (state.player.isCollidingWith(state.enemies[i])) { state.player.takeDamage(); state.enemies.splice(i, 1); } } for (let i = state.faithOrbs.length - 1; i >= 0; i--) { if (state.player.isCollidingWith(state.faithOrbs[i])) { state.score += 5; playSound(sounds.collect); state.faithOrbs.splice(i, 1); } } if (state.score >= config.winScore && !state.levelComplete) endGame(true); scoreEl.textContent = `FÉ: ${state.score}`; livesEl.textContent = `VIDAS: ${state.lives}`; }
+function draw() { ctx.clearRect(0, 0, canvas.width, canvas.height); if (images.background) ctx.drawImage(images.background, 0, 0, canvas.width, canvas.height); if (!state.gameStarted) return; state.faithOrbs.forEach(orb => orb.draw()); state.player.draw(); state.projectiles.forEach(p => p.draw()); state.enemyProjectiles.forEach(p => p.draw()); state.enemies.forEach(e => e.draw()); if (state.levelComplete && images.goal) { ctx.drawImage(images.goal, canvas.width - 150, canvas.height - 200, 150, 200); } }
+function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
 
-    if (state.gameTime % 600 === 0 && state.gameTime > 0) {
-        state.currentEnemySpeed += 0.25;
-        if (state.currentSpawnRate > 60) state.currentSpawnRate -= 10;
-    }
-    
-    if (state.gameTime % Math.round(state.currentSpawnRate) === 0) {
-        const enemyY = canvas.height - 80 - Math.random() * 200;
-        state.enemySpawnCounter++;
-        if (state.enemySpawnCounter % 4 === 0) {
-            state.enemies.push(new ShooterEnemy(canvas.width, enemyY, state.currentEnemySpeed * 0.8));
-        } else {
-            state.enemies.push(new Enemy(canvas.width, enemyY, state.currentEnemySpeed));
-        }
-    }
-    
-    if (state.gameTime > 0 && state.gameTime % 250 === 0) {
-        const orbY = Math.random() * (canvas.height - 200) + 50;
-        const orbX = Math.random() * (canvas.width - 100) + 50;
-        state.faithOrbs.push(new FaithOrb(orbX, orbY));
-    }
-
-    state.projectiles.forEach(p => p.update());
-    state.enemyProjectiles.forEach(p => p.update());
-    state.enemies.forEach(e => e.update());
-
-    state.projectiles = state.projectiles.filter(p => p.x <= canvas.width);
-    state.enemyProjectiles = state.enemyProjectiles.filter(p => p.y < canvas.height);
-    state.enemies = state.enemies.filter(e => e.x + e.width >= 0);
-
-    for (let i = state.projectiles.length - 1; i >= 0; i--) {
-        for (let j = state.enemies.length - 1; j >= 0; j--) {
-            const p = state.projectiles[i];
-            const e = state.enemies[j];
-            if (p?.isCollidingWith(e)) {
-                playSound(sounds.hit);
-                state.projectiles.splice(i, 1);
-                
-                if (e instanceof ShooterEnemy) {
-                    if (e.takeHit()) {
-                        state.score += 25;
-                        state.enemies.splice(j, 1);
-                    }
-                } else {
-                    state.score += 10;
-                    state.enemies.splice(j, 1);
-                }
-                break;
-            }
-        }
-    }
-    
-    for (let i = state.enemyProjectiles.length - 1; i >= 0; i--) {
-        const p = state.enemyProjectiles[i];
-        if (p?.isCollidingWith(state.player)) {
-            state.player.takeDamage();
-            state.enemyProjectiles.splice(i, 1);
-        }
-    }
-
-    for (let i = state.enemies.length - 1; i >= 0; i--) {
-        if (state.player.isCollidingWith(state.enemies[i])) {
-            state.player.takeDamage();
-            state.enemies.splice(i, 1);
-        }
-    }
-
-    for (let i = state.faithOrbs.length - 1; i >= 0; i--) {
-        if(state.player.isCollidingWith(state.faithOrbs[i])) {
-            state.score += 5;
-            playSound(sounds.collect);
-            state.faithOrbs.splice(i, 1);
-        }
-    }
-
-    if (state.score >= config.winScore && !state.levelComplete) endGame(true);
-
-    scoreEl.textContent = `FÉ: ${state.score}`;
-    livesEl.textContent = `VIDAS: ${state.lives}`;
-}
-
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if(images.background) ctx.drawImage(images.background, 0, 0, canvas.width, canvas.height);
-    if (!state.gameStarted) return;
-    
-    state.faithOrbs.forEach(orb => orb.draw());
-    state.player.draw();
-    state.projectiles.forEach(p => p.draw());
-    state.enemyProjectiles.forEach(p => p.draw());
-    state.enemies.forEach(e => e.draw());
-
-    if (state.levelComplete && images.goal) {
-         ctx.drawImage(images.goal, canvas.width - 150, canvas.height - 200, 150, 200);
-    }
-}
-
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
-}
-
-// --- CONTROLE DE ESTADO DO JOGO ---
+// --- CONTROLE DE ESTADO DO JOGO (LÓGICA DE INICIALIZAÇÃO ALTERADA) ---
 function showMessage(title, text, buttonText, onButtonClick) {
-    const messageButton = document.getElementById('message-button');
     messageTitle.textContent = title;
     messageText.textContent = text;
     messageButton.textContent = buttonText;
-    messageContainer.classList.remove('hidden');
-    const newButton = messageButton.cloneNode(true);
+    const newButton = messageButton.cloneNode(true); // Previne listeners duplicados
     messageButton.parentNode.replaceChild(newButton, messageButton);
     newButton.onclick = onButtonClick;
+    messageContainer.classList.remove('hidden');
 }
 
-function hideMessage() { messageContainer.classList.add('hidden'); }
+function hideMessage() {
+    messageContainer.classList.add('hidden');
+}
 
 function resetGame() {
     state.player = new Player(50, canvas.height - 80);
@@ -336,7 +151,7 @@ function resetGame() {
     state.gameTime = 0;
     state.levelComplete = false;
     state.gameOver = false;
-    state.gameStarted = true;
+    state.gameStarted = true; // Permite que o jogo rode
     state.currentEnemySpeed = config.enemyBaseSpeed;
     state.currentSpawnRate = config.enemySpawnBaseRate;
     state.enemySpawnCounter = 0;
@@ -344,32 +159,47 @@ function resetGame() {
     livesEl.textContent = `VIDAS: ${state.lives}`;
 }
 
-// PASSO 3: AQUI ESTÁ A FUNÇÃO CORRIGIDA
-function startGame() {
-    // Garante que os eventos de clique/tecla iniciais sejam removidos
-    if (startInteraction) {
-        document.removeEventListener('click', startInteraction);
-        document.removeEventListener('keydown', startInteraction);
+// A nova função 'startGame' agora é 'async' e controla o carregamento
+async function startGame() {
+    // Se os assets (imagens/sons) ainda não foram carregados
+    if (!assetsLoaded) {
+        showMessage("Carregando...", "Aguarde, estamos preparando a sua jornada...", "...", () => {});
+
+        try {
+            await audioContext.resume(); // Essencial para o áudio começar
+            await loadAssets();
+            
+            // Configura o que só precisa rodar uma vez na vida do jogo
+            setupEventListeners();
+            gameLoop();
+            assetsLoaded = true; // Marca que o carregamento foi concluído
+
+        } catch (err) {
+            console.error("Erro ao carregar o jogo:", err);
+            showMessage("Erro!", "Não foi possível carregar os recursos do jogo.", "OK", () => {});
+            return; // Para a execução se o carregamento falhar
+        }
     }
+
+    // Isso roda toda vez que um jogo começa (a primeira vez e nos 'restarts')
     hideMessage();
     resetGame();
 }
 
 function endGame(isWin) {
-    if(state.gameOver || state.levelComplete) return;
+    if (state.gameOver || state.levelComplete) return;
+    state.gameOver = !isWin;
+    state.levelComplete = isWin;
 
     if (isWin) {
-        state.levelComplete = true;
         playSound(sounds.levelWin);
-        showMessage("FASE CONCLUÍDA!", `Você alcançou ${config.winScore} pontos de Fé e superou as distrações. Continue firme!`, "Jogar Novamente", startGame);
+        showMessage("FASE CONCLUÍDA!", `Você alcançou ${config.winScore} pontos de Fé. Continue firme!`, "Jogar Novamente", startGame);
     } else {
-        state.gameOver = true;
         playSound(sounds.gameOver);
         showMessage("FIM DE JOGO", "As distrações foram fortes, mas não desista. Tente novamente!", "Recomeçar", startGame);
     }
 }
 
-// --- INICIALIZAÇÃO E EVENTOS ---
 function setupEventListeners() {
     window.addEventListener('keydown', (e) => {
         state.keys[e.key] = true;
@@ -390,27 +220,13 @@ function setupEventListeners() {
     }
 }
 
-window.addEventListener('load', async () => {
-    // PASSO 2: AQUI ESTÁ A ALTERAÇÃO (SEM O 'const')
-    startInteraction = () => {
-        // Remove os próprios eventos para garantir que só execute uma vez
-        document.removeEventListener('click', startInteraction);
-        document.removeEventListener('keydown', startInteraction);
-        showMessage("Carregando...", "Aguarde, estamos preparando a sua jornada...", "...", ()=>{});
-        
-        audioContext.resume().then(async () => {
-            try {
-                await loadAssets();
-                setupEventListeners();
-                gameLoop();
-                showMessage("Jornada do Influenciador", `Use as setas/toque para se mover. Atire luz contra as dúvidas! Faça ${config.winScore} pontos para vencer!`, "Começar a Jornada!", startGame);
-            } catch(err) {
-                console.error("Erro ao carregar assets:", err);
-                showMessage("Erro!", "Não foi possível carregar os recursos do jogo. Verifique o console para mais detalhes.", "OK", ()=>{});
-            }
-        });
-    };
-    // Adiciona os eventos iniciais que apontam para a função acima
-    document.addEventListener('click', startInteraction);
-    document.addEventListener('keydown', startInteraction);
+// --- INICIALIZAÇÃO ---
+// Agora, apenas esperamos a página carregar e mostramos a tela inicial.
+window.addEventListener('load', () => {
+    showMessage(
+        "Jornada do Influenciador",
+        `Use as setas/toque para se mover. Atire luz contra as dúvidas! Faça ${config.winScore} pontos para vencer!`,
+        "Começar a Jornada!",
+        startGame // O botão "Começar" agora chama diretamente a nova função startGame
+    );
 });
